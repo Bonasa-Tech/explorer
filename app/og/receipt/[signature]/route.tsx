@@ -12,7 +12,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { Logger } from '@/app/shared/lib/logger';
 
-export const runtime = 'edge';
+// Node rather than edge: the receipt pulls in the transaction-data and receipt models, which reach
+// @solana/web3.js from 18 different modules, and that puts the bundle at ~1.03 MB — just over the
+// 1 MB edge limit. Trimming under it would mean unpicking web3.js from that whole dependency graph.
+// The response is cached for 30 minutes, so losing edge distribution costs little here.
+export const runtime = 'nodejs';
 
 const CACHE_DURATION = 30 * 60; // 30 minutes
 const DEFAULT_CACHE_HEADERS = {

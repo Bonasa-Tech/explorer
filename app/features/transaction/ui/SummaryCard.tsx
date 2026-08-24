@@ -8,7 +8,6 @@ import { SolBalance } from '@components/common/SolBalance';
 import { Badge } from '@components/shared/ui/badge';
 import { Button } from '@components/shared/ui/button';
 import { RefreshButton } from '@components/shared/ui/refresh-button';
-import { cn } from '@components/shared/utils';
 import { estimateRequestedComputeUnitsForParsedTransaction } from '@entities/compute-unit';
 import { ViewReceiptButton } from '@features/receipt';
 import { FetchStatus } from '@providers/cache';
@@ -38,42 +37,11 @@ import { V1_TRANSACTION_SIZE_LIMIT } from '@/app/shared/lib/v1-message-bridge';
 import { Card } from '@/app/shared/ui/Card';
 import { getEpochForSlot } from '@/app/utils/epoch-schedule';
 
+import { Label, Row, Value } from './summary-rows';
+import { TransactionCostRows } from './TransactionCostRows';
 import { TransactionNotFoundCard } from './TransactionNotFoundCard';
 
-type RowProps = React.HTMLAttributes<HTMLDivElement> & { divider?: boolean };
-export function Row({ children, className, divider, ...props }: RowProps) {
-    return (
-        <div
-            className={cn(
-                'grid min-h-9 grid-cols-[clamp(100px,25%,200px)_1fr] items-baseline gap-2 px-3 py-2.5 md:px-4',
-                divider && 'border-1 border-b border-white/10 [border-bottom-style:solid]',
-                className,
-            )}
-            {...props}
-        >
-            {children}
-        </div>
-    );
-}
-
-function Label({ children, className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-    return (
-        <div
-            className={cn('flex flex-wrap items-center gap-1 overflow-hidden text-sm text-outer-space-300', className)}
-            {...props}
-        >
-            {children}
-        </div>
-    );
-}
-
-function Value({ children, className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-    return (
-        <div className={cn('break-all font-mono text-sm text-white', className)} {...props}>
-            {children}
-        </div>
-    );
-}
+export { Row } from './summary-rows';
 
 function getTransactionErrorReason(
     info: TransactionStatusInfo,
@@ -106,7 +74,7 @@ export function SummaryCard({ signature, autoRefresh }: SignatureProps & WithAut
     const status = useTransactionStatus(signature);
     const details = useTransactionDetails(signature);
     const rawDetails = useRawTransactionDetails(signature);
-    const { cluster, status: clusterStatus } = useCluster();
+    const { cluster, status: clusterStatus, url } = useCluster();
     const clusterInfo = useClusterInfo();
     const inspectPath = useClusterPath({ pathname: `/tx/${signature}/inspect` });
     // The error link's target is only known inside the render below, so this needs the callback form.
@@ -326,6 +294,15 @@ export function SummaryCard({ signature, autoRefresh }: SignatureProps & WithAut
                         </Value>
                     </Row>
                 )}
+
+                {/* SGP-0003 fee and its cost-unit breakdown */}
+                <TransactionCostRows
+                    message={rawDetails?.data?.raw?.message}
+                    accountKeys={transaction?.message.accountKeys.map(key => key.pubkey.toBase58())}
+                    requestedComputeUnits={reservedCUs}
+                    feeLamports={fee}
+                    url={url}
+                />
 
                 {/* Transaction cost */}
                 {costUnits !== undefined && (

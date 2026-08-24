@@ -273,7 +273,12 @@ function ProgramLogRow({
                             return (
                                 <span key={key}>
                                     <span className="text-dk-gray-700">{log.prefix}</span>
-                                    <span className={logTextVariants({ variant: log.style })}>{log.text}</span>
+                                    <span
+                                        style={{ whiteSpace: 'pre-line' }}
+                                        className={logTextVariants({ variant: log.style })}
+                                    >
+                                        {log.text}
+                                    </span>
                                 </span>
                             );
                         })}
