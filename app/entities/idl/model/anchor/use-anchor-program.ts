@@ -9,6 +9,14 @@ import { Cluster } from '@/app/utils/cluster';
 import { formatSerdeIdl, getFormattedIdl } from '../formatters/format';
 import { useProgramIdls } from '../use-program-idls';
 import { getProvider } from './anchor-provider';
+import manifestIdl from './idls/manifest.json';
+import wrapperIdl from './idls/wrapper.json';
+
+// Manifest and its wrapper publish no on-chain IDL, so serve the vendored copies.
+const VENDORED_IDLS: Record<string, Idl> = {
+    MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms: manifestIdl as unknown as Idl,
+    wMNFSTkir3HgyZTsB7uqu3i7FA73grFCptPXgrZjksL: wrapperIdl as unknown as Idl,
+};
 
 export function useAnchorProgram(
     programAddress: string,
@@ -18,7 +26,7 @@ export function useAnchorProgram(
     // The Anchor leg of the shared program-IDL resolution (same hook the IDL card uses, so the
     // decoder and card never diverge); the PMP leg it also resolves is unused here.
     const { anchorIdl, isLoading } = useProgramIdls(programAddress, url, cluster ?? Cluster.MainnetBeta);
-    const idl: Idl | null = (anchorIdl as Idl | undefined) ?? null;
+    const idl: Idl | null = VENDORED_IDLS[programAddress] ?? (anchorIdl as Idl | undefined) ?? null;
     const program: Program<Idl> | null = useMemo(() => {
         if (!idl) return null;
 

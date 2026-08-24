@@ -1,9 +1,14 @@
+import { FillLog } from '@cks-systems/manifest-sdk';
 import { TransactionError } from '@solana/web3.js';
 import { Cluster } from '@utils/cluster';
 import { getTransactionInstructionError } from '@utils/program-err';
 import { getProgramName } from '@utils/tx';
 
 import { Logger } from '@/app/shared/lib/logger';
+
+const MANIFEST_PROGRAM_ID = 'MNFSTqtC93rEfYHB6hF82sKdZpUDFWkViLByLd1k1Ms';
+const PROGRAM_DATA_PREFIX = 'Program data: ';
+const FILL_LOG_DISCRIMINATOR = Uint8Array.from([58, 230, 242, 3, 75, 113, 4, 169]);
 
 export type LogMessage = {
     text: string;
@@ -47,6 +52,7 @@ export function parseProgramLogs(
         prettyError = getTransactionInstructionError(error);
     }
 
+    const currentProgram: string[] = [];
     logs.forEach(log => {
         if (log.startsWith('Program log:')) {
             // Use passive tense
@@ -60,12 +66,22 @@ export function parseProgramLogs(
                 style: 'muted',
                 text: log,
             });
-        } else if (log.startsWith('Program data:')) {
+        } else if (log.startsWith(PROGRAM_DATA_PREFIX)) {
             prettyLogs[prettyLogs.length - 1].logs.push({
                 prefix: prefixBuilder(depth),
                 style: 'muted',
                 text: log,
             });
+
+            const manifestFillLog =
+                currentProgram[currentProgram.length - 1] === MANIFEST_PROGRAM_ID ? decodeManifestFillLog(log) : null;
+            if (manifestFillLog) {
+                prettyLogs[prettyLogs.length - 1].logs.push({
+                    prefix: prefixBuilder(depth),
+                    style: 'muted',
+                    text: manifestFillLog,
+                });
+            }
         } else if (log.startsWith('Log truncated')) {
             prettyLogs[prettyLogs.length - 1].truncated = true;
         } else {
@@ -75,6 +91,8 @@ export function parseProgramLogs(
 
             if (matches.length > 0) {
                 const programAddress = matches[0][1];
+                currentProgram.push(programAddress);
+
                 const programName = getProgramName(programAddress, cluster);
 
                 if (depth === 0) {
@@ -95,6 +113,7 @@ export function parseProgramLogs(
 
                 depth++;
             } else if (log.includes('success')) {
+                currentProgram.pop();
                 prettyLogs[prettyLogs.length - 1].logs.push({
                     prefix: prefixBuilder(depth),
                     style: 'success',
@@ -102,6 +121,7 @@ export function parseProgramLogs(
                 });
                 depth--;
             } else if (log.includes('failed')) {
+                currentProgram.pop();
                 const instructionLog = prettyLogs[prettyLogs.length - 1];
                 instructionLog.failed = true;
 
@@ -177,4 +197,40 @@ export function parseProgramLogs(
     }
 
     return prettyLogs;
+}
+
+// Manifest emits its fill events as `Program data:` payloads rather than self-CPI event
+// instructions, so decode them here and render the pretty form alongside the raw base64.
+function decodeManifestFillLog(log: string): string | null {
+    const buffer = Buffer.from(log.substring(PROGRAM_DATA_PREFIX.length), 'base64');
+    if (!isEqualBytes(FILL_LOG_DISCRIMINATOR, Uint8Array.from(buffer.subarray(0, 8)))) {
+        return null;
+    }
+
+    const fillLog = FillLog.deserialize(buffer.subarray(8))[0];
+    const pretty = fillLog.pretty();
+    delete (pretty as Partial<typeof pretty>).padding;
+    // TODO: Import convertU128 from manifest sdk, also factor in decimals to make human readable
+    const readable = {
+        ...pretty,
+        baseAtoms: Number(fillLog.baseAtoms.inner),
+        price: Number(fillLog.price.inner),
+        quoteAtoms: Number(fillLog.quoteAtoms.inner),
+    };
+
+    return `MFX Fill Log: \n${JSON.stringify(readable, null, 2)}`;
+}
+
+export function isEqualBytes(bytes1: Uint8Array, bytes2: Uint8Array): boolean {
+    if (bytes1.length !== bytes2.length) {
+        return false;
+    }
+
+    for (let i = 0; i < bytes1.length; i++) {
+        if (bytes1[i] !== bytes2[i]) {
+            return false;
+        }
+    }
+
+    return true;
 }
